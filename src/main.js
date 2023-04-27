@@ -1,20 +1,30 @@
 import { Telegraf } from 'telegraf';
+import { code } from 'telegraf/format'
 import { message } from 'telegraf/filters'
 import config from 'config'
 import { ogg } from './ogg.js';
+import { openai } from './openai.js';
 
 const bot = new Telegraf(config.get('TELEGRAM_TOKEN'));
 
 
 bot.on(message('voice'), async (ctx) => {
     try {
+        await ctx.reply(code('Сообщение принял. Жду ответ от сервера...'));
         const link = await ctx.telegram.getFileLink(ctx.message.voice.file_id);
         const userId = String(ctx.message.from.id);
         const oggPath = await ogg.create(link.href, userId);
         const mp3Path = await ogg.toMp3(oggPath, userId);
-        await ctx.reply(mp3Path);
+
+        const text = await openai.transcription(mp3Path);
+        
+        await ctx.reply(code(`Ваш запрос: ${text}`));
+
+        const messages = [{role: openai.roles.USER, content: text}];
+        const response = await openai.chat(messages);
+        await ctx.reply(response.content);
     } catch (e) {
-        console.log('error while voice message', e.message);
+        console.log('Error while voice message', e.message);
     }
 })
 
